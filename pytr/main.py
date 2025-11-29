@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import shutil
 import signal
+import sys
 from datetime import datetime, timedelta
 from importlib.metadata import version
 from pathlib import Path
@@ -309,12 +310,12 @@ def get_main_parser():
         help="Output directory",
         metavar="PATH",
         type=Path,
-        default=Path("."),
+        default=".",
     )
     parser_export_transactions.add_argument(
         "outputfile",
         help="Output file path (optional)",
-        type=argparse.FileType("w", encoding="utf-8"),
+        type=Path,
         nargs="?",
     )
 
@@ -333,7 +334,7 @@ def get_main_parser():
     parser_get_price_alarms.add_argument(
         "--outputfile",
         help="Output file path",
-        type=argparse.FileType("w", encoding="utf-8"),
+        type=str,
         default="-",
         nargs="?",
     )
@@ -359,7 +360,7 @@ def get_main_parser():
     parser_set_price_alarms.add_argument(
         "--inputfile",
         help="Input file path",
-        type=argparse.FileType("r", encoding="utf-8"),
+        type=str,
         default="-",
         nargs="?",
     )
@@ -498,11 +499,12 @@ def main():
         asyncio.run(tl.tl_loop())
         events = tl.events
 
-        with (
-            (args.outputdir / ("account_transactions." + args.export_format)).open("w", encoding="utf-8")
-            if args.outputfile is None
-            else args.outputfile as f
-        ):
+        if args.outputfile is None:
+            output_path = args.outputdir / ("account_transactions." + args.export_format)
+        else:
+            output_path = args.outputfile
+
+        with output_path.open("w", encoding="utf-8") as f:
             TransactionExporter(
                 lang=args.lang,
                 date_with_time=args.date_with_time,
@@ -515,32 +517,42 @@ def main():
             )
     elif args.command == "get_price_alarms":
         try:
-            Alarms(
-                login(
-                    phone_no=args.phone_no,
-                    pin=args.pin,
-                    web=not args.applogin,
-                    store_credentials=args.store_credentials,
-                ),
-                args.input,
-                args.outputfile,
-            ).get()
+            outputfile = sys.stdout if args.outputfile == "-" else open(args.outputfile, "w", encoding="utf-8")
+            try:
+                Alarms(
+                    login(
+                        phone_no=args.phone_no,
+                        pin=args.pin,
+                        web=not args.applogin,
+                        store_credentials=args.store_credentials,
+                    ),
+                    args.input,
+                    outputfile,
+                ).get()
+            finally:
+                if outputfile is not sys.stdout:
+                    outputfile.close()
         except ValueError as e:
             print(e)
             return -1
     elif args.command == "set_price_alarms":
         try:
-            Alarms(
-                login(
-                    phone_no=args.phone_no,
-                    pin=args.pin,
-                    web=not args.applogin,
-                    store_credentials=args.store_credentials,
-                ),
-                args.input,
-                args.inputfile,
-                args.remove_current_alarms,
-            ).set()
+            inputfile = sys.stdin if args.inputfile == "-" else open(args.inputfile, "r", encoding="utf-8")
+            try:
+                Alarms(
+                    login(
+                        phone_no=args.phone_no,
+                        pin=args.pin,
+                        web=not args.applogin,
+                        store_credentials=args.store_credentials,
+                    ),
+                    args.input,
+                    inputfile,
+                    args.remove_current_alarms,
+                ).set()
+            finally:
+                if inputfile is not sys.stdin:
+                    inputfile.close()
         except ValueError as e:
             print(e)
             return -1
@@ -549,10 +561,6 @@ def main():
         print(installed_version)
         check_version(installed_version)
     else:
-        if hasattr(args, "for_readme") and args.for_readme:
-            parser.formatter_class = lambda prog: argparse.ArgumentDefaultsHelpFormatter(
-                "pytr", max_help_position=40, width=120
-            )
         parser.print_help()
 
 
