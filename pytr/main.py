@@ -21,6 +21,9 @@ from pytr.timeline import Timeline
 from pytr.transactions import SUPPORTED_LANGUAGES, TransactionExporter
 from pytr.utils import check_version, get_logger
 
+# Global variable to store the original SIGINT handler
+original_sigint = None
+
 
 def get_main_parser():
     def formatter(prog):
@@ -377,7 +380,7 @@ def get_main_parser():
     return parser
 
 
-def exit_gracefully(signum, frame):
+def exit_gracefully(_signum, _frame):
     # restore the original signal handler as otherwise evil things will happen
     # in input when CTRL+C is pressed, and our signal handler is not re-entrant
     global original_sigint
